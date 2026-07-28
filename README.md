@@ -31,10 +31,6 @@ Built for the Digital Back Office **AI Engineer Assignment**.
 - Basic **response caching** and **structured logging** for observability.
 
 ---
-
-## 🏗️ Architecture
-
-```mermaid
 ## 🏗️ Architecture
 
 ```mermaid
