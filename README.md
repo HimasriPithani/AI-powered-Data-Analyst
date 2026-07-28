@@ -35,36 +35,49 @@ Built for the Digital Back Office **AI Engineer Assignment**.
 ## 🏗️ Architecture
 
 ```mermaid
-flowchart TB
-    subgraph UI["Streamlit UI (app/main.py)"]
-        A[CSV Upload] --> B[DataManager]
-        C[Chat Input / Quick Actions] --> D[LLMClient.ask]
-        D --> E[Rendered Answer + Charts/Tables]
-    end
+## 🏗️ Architecture
 
-    subgraph Agent["Agentic Reasoning Loop"]
-        D --> F[Groq — Llama 3.3 70B (OpenAI-compatible chat completions)]
-        F -->|tool_use| G[Tool Dispatcher]
-        G -->|tool_result| F
-        F -->|final text| E
-    end
+```mermaid
+flowchart LR
 
-    subgraph Tools["Execution Layer (sandboxed / declarative)"]
-        G --> H[run_pandas_code\nrestricted exec sandbox]
-        G --> I[run_sql\nDuckDB, SELECT-only]
-        G --> J[create_chart\nPlotly, declarative spec]
-        G --> K[detect_anomalies\nz-score + IQR]
-        G --> L[get_dataset_info\nschema / profile]
-    end
+    User([User])
 
-    B --> H
-    B --> I
-    B --> J
-    B --> K
-    B --> L
+    User --> UI["Streamlit UI"]
 
-    style Agent fill:#eef6ff
-    style Tools fill:#f5f5f5
+    UI --> Upload["CSV Upload"]
+    UI --> Chat["Natural Language Query"]
+
+    Upload --> DM["Data Manager"]
+
+    Chat --> LLM["Groq Llama 3.3 70B"]
+
+    LLM --> Dispatcher["Tool Dispatcher"]
+
+    Dispatcher --> Pandas["Pandas Engine"]
+    Dispatcher --> SQL["DuckDB SQL"]
+    Dispatcher --> Charts["Plotly Charts"]
+    Dispatcher --> Anomaly["Anomaly Detection"]
+    Dispatcher --> Info["Dataset Info"]
+
+    DM --> Pandas
+    DM --> SQL
+    DM --> Charts
+    DM --> Anomaly
+    DM --> Info
+
+    Pandas --> LLM
+    SQL --> LLM
+    Charts --> LLM
+    Anomaly --> LLM
+    Info --> LLM
+
+    LLM --> UI
+    UI --> User
+
+    style LLM fill:#E3F2FD
+    style Dispatcher fill:#FFF3E0
+    style UI fill:#E8F5E9
+```
 ```
 
 **Design principle:** The LLM is the *reasoner*, never the *executor*. It decides
