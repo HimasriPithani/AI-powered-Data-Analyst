@@ -80,24 +80,11 @@ This project was built for the **Digital Back Office AI Engineer Assignment**.
 
 # 🎥 Demo
 
-**Live Application**
-
-> Add your deployment URL here
-
-Example:
-
-```
-https://your-app.streamlit.app
-```
-
 **Demo Video**
 
-> Add your YouTube or Google Drive link here
-
-Example:
-
 ```
-https://youtu.be/xxxxxxxx
+https://drive.google.com/file/d/1HJck1IF_EAE82feEQdSdfmAxp0JnyJP7/view?usp=drivesdk
+
 ```
 
 ---
