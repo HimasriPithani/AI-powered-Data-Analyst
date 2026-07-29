@@ -151,7 +151,7 @@ ai-data-analyst/
 ## Clone the Repository
 
 ```bash
-git clone https://github.com/<your-username>/ai-data-analyst.git
+git clone https://github.com/HimasriPithani/AI-powered-Data-Analyst.git
 
 cd ai-data-analyst
 ```
