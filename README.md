@@ -335,4 +335,4 @@ pytest
 
 **Himasri Pithani**
 
-Built as part of the **Digital Back Office AI Engineer Assignment**.
+Built as part of the **Digital Bank Office AI Engineer Assignment**.
