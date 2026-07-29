@@ -33,6 +33,9 @@ Guidelines:
 - Use `run_pandas_code` or `run_sql` for aggregations, filtering, ranking, trends, and
   calculations. Prefer SQL when the user asks for SQL explicitly; otherwise use whichever is
   clearer. For run_pandas_code you MUST assign the answer to a variable named `result`.
+  `pd`, `np`, `math`, and `statistics` are pre-imported and the dataset(s) are already
+  available as local variables — never write `import` statements, they are blocked by the
+  sandbox and the call will fail every time.
 - Use `create_chart` whenever a visualization would help answer the question, or when asked
   directly for a chart/graph/plot.
 - Use `detect_anomalies` when asked about anomalies, outliers, unusual values, or data quality
@@ -47,6 +50,13 @@ Guidelines:
 Here is the schema of the currently loaded dataset(s):
 {schema_context}
 """
+
+# Groq's tool-use grammar occasionally emits malformed function-call syntax
+# (e.g. "<function=name={...}</function>" instead of proper JSON arguments),
+# which the API rejects server-side with a 400 before it ever reaches us as
+# tool_calls. This is usually a one-off sampling glitch, not a persistent
+# failure, so it's worth a couple of identical retries before giving up.
+MAX_TOOL_CALL_RETRIES = 2
 
 
 @dataclass
@@ -74,6 +84,48 @@ class LLMClient:
                 "environment or .env file."
             )
         self.client = groq.Groq(api_key=self.api_key)
+
+    def _is_tool_use_failed(self, e: groq.BadRequestError) -> bool:
+        body = getattr(e, "body", None)
+        if not isinstance(body, dict):
+            return False
+        err = body.get("error", {})
+        return isinstance(err, dict) and err.get("code") == "tool_use_failed"
+
+    def _create_completion(self, system_message: Dict[str, Any], messages: List[Dict[str, Any]]):
+        """Call the Groq chat completions endpoint, retrying a few times if
+        the model emits a malformed tool call that Groq rejects server-side."""
+        last_error: Optional[Exception] = None
+
+        for attempt in range(MAX_TOOL_CALL_RETRIES + 1):
+            try:
+                return self.client.chat.completions.create(
+                    model=self.model,
+                    max_tokens=settings.max_tokens,
+                    messages=[system_message] + messages,
+                    tools=TOOL_SCHEMAS,
+                    tool_choice="auto",
+                )
+            except groq.BadRequestError as e:
+                last_error = e
+                if self._is_tool_use_failed(e) and attempt < MAX_TOOL_CALL_RETRIES:
+                    failed_gen = None
+                    body = getattr(e, "body", None)
+                    if isinstance(body, dict):
+                        failed_gen = body.get("error", {}).get("failed_generation")
+                    logger.warning(
+                        f"Groq emitted a malformed tool call (attempt {attempt + 1}/"
+                        f"{MAX_TOOL_CALL_RETRIES + 1}), retrying: {failed_gen!r}"
+                    )
+                    continue
+                raise
+            except groq.APIError as e:
+                last_error = e
+                raise
+
+        # Unreachable in practice (loop always returns or raises), but keeps
+        # type checkers happy and guards against future edits.
+        raise last_error  # type: ignore[misc]
 
     def ask(
         self,
@@ -107,13 +159,7 @@ class LLMClient:
                 print(json.dumps(TOOL_SCHEMAS, indent=2))
                 print("=" * 60)
 
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    max_tokens=settings.max_tokens,
-                    messages=[system_message] + messages,
-                    tools=TOOL_SCHEMAS,
-                    tool_choice="auto",
-                )
+                response = self._create_completion(system_message, messages)
             except groq.APIError as e:
                 logger.exception("Groq API error")
                 return AgentResponse(

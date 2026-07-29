@@ -36,15 +36,19 @@ TOOL_SCHEMAS = [
         "run_pandas_code",
         "Execute a pandas snippet against the loaded dataframe(s) to answer an "
         "analytical question (aggregations, filtering, ranking, growth rates, "
-        "pivoting, top-N, etc). Reference dataframes by their dataset name "
-        "(shown in the schema context) as local variables. You MUST assign the "
-        "final answer to a variable named `result` (a DataFrame, Series, or scalar).",
+        "pivoting, top-N, etc). `pandas` and `numpy` are already imported as `pd` "
+        "and `np`, and `math`/`statistics` are also available — do NOT write any "
+        "import statements, they are rejected by the sandbox and the call will "
+        "fail. Reference dataframes by their dataset name (shown in the schema "
+        "context) as local variables — they are already loaded, do not read files "
+        "or redefine them. You MUST assign the final answer to a variable named "
+        "`result` (a DataFrame, Series, or scalar).",
         {
             "type": "object",
             "properties": {
                 "code": {
                     "type": "string",
-                    "description": "Python/pandas code. Must set `result = ...` at the end.",
+                    "description": "Python/pandas code. Do not include import statements. Must set `result = ...` at the end.",
                 }
             },
             "required": ["code"],

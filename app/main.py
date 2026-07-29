@@ -149,6 +149,14 @@ def inject_css():
         [data-testid="stChatMessageContent"] div {
             color: #111827 !important;
         }
+        
+        /* Code blocks/tables keep their own dark background — don't force dark text there */
+        [data-testid="stChatMessageContent"] pre,
+        [data-testid="stChatMessageContent"] pre *,
+        [data-testid="stChatMessageContent"] code,
+        [data-testid="stChatMessageContent"] code * {
+            color: #E5E7EB !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
