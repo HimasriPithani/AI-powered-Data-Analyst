@@ -153,10 +153,10 @@ class LLMClient:
                 print("=" * 60)
                 print("MODEL:", self.model)
                 print("MESSAGES:")
-                print(json.dumps([system_message] + messages, indent=2, default=str))
+           
                 print("=" * 60)
                 print("TOOLS:")
-                print(json.dumps(TOOL_SCHEMAS, indent=2))
+              
                 print("=" * 60)
 
                 response = self._create_completion(system_message, messages)
