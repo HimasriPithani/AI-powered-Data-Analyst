@@ -56,25 +56,25 @@ This project was built for the **Digital Back Office AI Engineer Assignment**.
 
 ## Home Page
 
-![Home](docs/screenshot1.png)
+![Home](docs/screenshots/home.png)
 
 ---
 
 ## Chat with Dataset
 
-![Chat](docs/screenshot2.png)
+![Chat](docs/screenshots/chat_with_dataset.png)
 
 ---
 
 ## Generated Charts
 
-![Charts](docs/screenshot3.png)
+![Charts](docs/screenshots/chart.png)
 
 ---
 
 ## Anomaly Detection
 
-![Anomalies](docs/screenshot4.png)
+![Anomalies](docs/screenshots/anomoly.png)
 
 ---
 
