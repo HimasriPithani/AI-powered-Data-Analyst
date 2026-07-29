@@ -22,6 +22,7 @@ class Settings:
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
     log_file: str = os.getenv("LOG_FILE", "logs/app.log")
     enable_cache: bool = os.getenv("ENABLE_CACHE", "true").lower() == "true"
+    reasoning_effort: str = "low" 
 
 
 settings = Settings()

@@ -151,17 +151,15 @@ class DataManager:
     # ------------------------------------------------------------------ #
     def schema_context(self) -> str:
         """A compact text description of all loaded datasets, used to ground
-        the LLM so it knows column names/types without seeing raw data."""
+        the LLM so it knows column names without seeing raw data. Kept
+        deliberately minimal — full detail (dtypes, sample rows, quality
+        warnings) is available on demand via the get_dataset_info tool."""
         parts = []
         for key, profile in self.profiles.items():
-            col_lines = ", ".join(f"{c} ({profile.dtypes[c]})" for c in profile.columns)
             parts.append(
-                f"Dataset '{key}': {profile.n_rows} rows x {profile.n_cols} cols.\n"
-                f"Columns: {col_lines}\n"
-                f"Sample row: {profile.sample[0] if profile.sample else '{}'}\n"
-                f"Data quality notes: {profile.quality_warnings or 'none'}"
+                f"Dataset '{key}' ({profile.n_rows} rows): {', '.join(profile.columns)}"
             )
-        return "\n\n".join(parts) if parts else "No datasets loaded yet."
+        return "\n".join(parts) if parts else "No datasets loaded yet."
 
     def get(self, key: str) -> Optional[pd.DataFrame]:
         return self.frames.get(key)

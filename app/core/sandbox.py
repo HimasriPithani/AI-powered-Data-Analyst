@@ -121,7 +121,7 @@ def run_pandas_code(code: str, frames: Dict[str, pd.DataFrame], timeout_s: int =
     return result
 
 
-def _serialize(value: Any, max_rows: int = 100) -> Any:
+def _serialize(value: Any, max_rows: int = 30) -> Any:
     """Convert pandas/numpy results into JSON-friendly, size-capped structures."""
     if isinstance(value, pd.DataFrame):
         truncated = value.head(max_rows)
@@ -147,3 +147,4 @@ def _serialize(value: Any, max_rows: int = 100) -> Any:
     if isinstance(value, np.ndarray):
         return value.tolist()[:max_rows]
     return value
+
