@@ -61,6 +61,62 @@ class _Timeout:
             pass
 
 
+# Modules already injected into the sandbox globals — an `import` line for
+# exactly one of these is redundant, not dangerous, so it's safe to drop.
+# Anything else (import os, import subprocess, from os import system, ...)
+# must be LEFT IN the code so `_static_check` below can see and reject it.
+# Silently stripping *all* import lines (the previous behavior) made the
+# import ban a no-op: `import os\nresult = os.system(...)` would just lose
+# its import line and fail later with a confusing NameError instead of
+# being blocked outright.
+_ALLOWED_IMPORT_MODULES = {"pandas", "numpy", "math", "statistics"}
+
+
+def _is_whitelisted_import(stmt: str) -> bool:
+    """True only for `import <allowed>` / `from <allowed> import ...`."""
+    try:
+        node = ast.parse(stmt, mode="exec").body[0]
+    except (SyntaxError, IndexError):
+        return False
+
+    if isinstance(node, ast.Import):
+        modules = {n.name.split(".")[0] for n in node.names}
+    elif isinstance(node, ast.ImportFrom):
+        modules = {(node.module or "").split(".")[0]}
+    else:
+        return False
+
+    return bool(modules) and modules <= _ALLOWED_IMPORT_MODULES
+
+
+def _sanitize_code(code: str) -> str:
+    """Drop only harmless, already-provided import statements; leave any
+    other import line in place so `_static_check` can reject it."""
+
+    cleaned = []
+
+    for line in code.splitlines():
+        stripped = line.strip()
+
+        if stripped.startswith("import ") or stripped.startswith("from "):
+            if _is_whitelisted_import(stripped):
+                continue  # redundant — pd/np/math/statistics already provided
+            # not whitelisted (e.g. "import os") — keep it so the static
+            # check below can flag it explicitly.
+
+        cleaned.append(line)
+
+    code = "\n".join(cleaned)
+
+    # Fix deprecated pandas frequency aliases
+    code = code.replace(".resample('M')", ".resample('ME')")
+    code = code.replace('.resample("M")', '.resample("ME")')
+    code = code.replace("freq='M'", "freq='ME'")
+    code = code.replace('freq="M"', 'freq="ME"')
+
+    return code
+
+
 def _static_check(code: str) -> None:
     try:
         tree = ast.parse(code, mode="exec")
@@ -102,11 +158,17 @@ def run_pandas_code(code: str, frames: Dict[str, pd.DataFrame], timeout_s: int =
     result: Dict[str, Any] = {"success": False, "result": None, "stdout": "", "error": None}
 
     try:
+        code = _sanitize_code(code)
         _static_check(code)
         with _Timeout(timeout_s):
             with contextlib.redirect_stdout(stdout_buf):
                 exec(code, global_env, local_env)  # noqa: S102 - sandboxed on purpose
-        value = local_env.get("result", None)
+        if "result" not in local_env:
+            raise SandboxError(
+                "Your code must assign the final answer to a variable named 'result'."
+            )
+
+        value = local_env["result"]
         result["result"] = _serialize(value)
         result["success"] = True
     except SandboxError as e:
@@ -123,6 +185,23 @@ def run_pandas_code(code: str, frames: Dict[str, pd.DataFrame], timeout_s: int =
 
 def _serialize(value: Any, max_rows: int = 30) -> Any:
     """Convert pandas/numpy results into JSON-friendly, size-capped structures."""
+
+    # Handle nested dictionaries
+    if isinstance(value, dict):
+        return {
+            str(k): _serialize(v, max_rows)
+            for k, v in list(value.items())[:100]
+        }
+
+    # Handle lists
+    if isinstance(value, list):
+        return [_serialize(v, max_rows) for v in value[:100]]
+
+    # Handle tuples
+    if isinstance(value, tuple):
+        return tuple(_serialize(v, max_rows) for v in value[:100])
+
+    # DataFrame
     if isinstance(value, pd.DataFrame):
         truncated = value.head(max_rows)
         return {
@@ -132,6 +211,8 @@ def _serialize(value: Any, max_rows: int = 30) -> Any:
             "rows": truncated.replace({np.nan: None}).to_dict(orient="records"),
             "truncated": len(value) > max_rows,
         }
+
+    # Series
     if isinstance(value, pd.Series):
         truncated = value.head(max_rows)
         return {
@@ -140,11 +221,27 @@ def _serialize(value: Any, max_rows: int = 30) -> Any:
             "values": truncated.replace({np.nan: None}).to_dict(),
             "truncated": len(value) > max_rows,
         }
-    if isinstance(value, (np.integer,)):
+
+    # NumPy scalars
+    if isinstance(value, np.integer):
         return int(value)
-    if isinstance(value, (np.floating,)):
+
+    if isinstance(value, np.floating):
         return float(value)
+
+    if isinstance(value, np.bool_):
+        return bool(value)
+
+    # NumPy array
     if isinstance(value, np.ndarray):
         return value.tolist()[:max_rows]
-    return value
 
+    # Pandas Timestamp
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+
+    # Pandas NaT
+    if value is pd.NaT:
+        return None
+
+    return value

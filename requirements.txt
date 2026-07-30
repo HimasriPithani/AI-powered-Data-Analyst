@@ -1,5 +1,5 @@
 streamlit==1.38.0
-groq==0.11.0
+groq==1.6.0
 pandas==2.2.2
 numpy==1.26.4
 duckdb==1.0.0

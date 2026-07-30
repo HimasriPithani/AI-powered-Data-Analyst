@@ -33,16 +33,15 @@ def _fn(name: str, description: str, parameters: Dict[str, Any]) -> Dict[str, An
 
 TOOL_SCHEMAS = [
     _fn(
-        "run_pandas_code",
-        "Execute a pandas snippet against the loaded dataframe(s) to answer an "
-        "analytical question (aggregations, filtering, ranking, growth rates, "
-        "pivoting, top-N, etc). `pandas` and `numpy` are already imported as `pd` "
-        "and `np`, and `math`/`statistics` are also available — do NOT write any "
-        "import statements, they are rejected by the sandbox and the call will "
-        "fail. Reference dataframes by their dataset name (shown in the schema "
-        "context) as local variables — they are already loaded, do not read files "
-        "or redefine them. You MUST assign the final answer to a variable named "
-        "`result` (a DataFrame, Series, or scalar).",
+       "run_pandas_code",
+        (
+            "Execute pandas code on the loaded dataset(s) to answer analytical questions. "
+            "Use existing dataset variables (e.g., sales_data). "
+            "Do not use import statements, read files, or redefine datasets. "
+            "`pd`, `np`, `math`, and `statistics` are already available. "
+            "Always assign the final output to `result` (DataFrame, Series, dict, list, or scalar). "
+            "Write only the code needed to answer the question."
+        ),
         {
             "type": "object",
             "properties": {
@@ -133,6 +132,19 @@ def execute_tool(tool_name: str, tool_input: Dict[str, Any], dm: DataManager) ->
     than raised, so the agent loop can feed them back to the LLM to retry."""
     try:
         if tool_name == "run_pandas_code":
+            logger.info("=" * 60)
+            logger.info(f"run_pandas_code received: {tool_input}")
+            logger.info("=" * 60)
+
+            if "code" not in tool_input:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Missing required argument 'code'. "
+                        f"Received: {tool_input}"
+                    ),
+                }
+
             return run_pandas_code(tool_input["code"], dm.all_frames())
 
         if tool_name == "run_sql":

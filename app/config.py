@@ -16,7 +16,7 @@ class Settings:
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
     model_name: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
     max_tokens: int = int(os.getenv("MAX_TOKENS", "2048"))
-    max_agent_turns: int = int(os.getenv("MAX_AGENT_TURNS", "6"))
+    max_agent_turns: int = int(os.getenv("MAX_AGENT_TURNS", "8"))
     max_rows_preview: int = int(os.getenv("MAX_ROWS_PREVIEW", "200"))
     max_upload_mb: int = int(os.getenv("MAX_UPLOAD_MB", "50"))
     log_level: str = os.getenv("LOG_LEVEL", "INFO")

@@ -48,6 +48,15 @@ def build_chart(
         if agg not in {"sum", "mean", "count", "max", "min", "median"}:
             agg = "sum"
         plot_df = plot_df.groupby(group_cols, as_index=False)[y].agg(agg)
+    elif chart_type == "line" and x and y and agg and pd.api.types.is_datetime64_any_dtype(plot_df[x]):
+        # Bucket a time series into monthly periods before plotting. Without
+        # this, a "trend over time" line chart on daily/transaction-level
+        # data is just one noisy point per row instead of a readable trend.
+        if agg not in {"sum", "mean", "count", "max", "min", "median"}:
+            agg = "sum"
+        group_cols = [x] + ([color] if color and color != x else [])
+        plot_df[x] = plot_df[x].dt.to_period("M").dt.to_timestamp()
+        plot_df = plot_df.groupby(group_cols, as_index=False)[y].agg(agg)
 
     try:
         if chart_type == "bar":

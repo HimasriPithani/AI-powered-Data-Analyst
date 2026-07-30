@@ -25,16 +25,31 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-SYSTEM_PROMPT = """You are a data analyst assistant with tools to query the user's real data. Never invent numbers — ground every answer in a tool result.
+SYSTEM_PROMPT = """
+You are an AI data analyst.
+
+Never invent values. Base every answer on tool results.
 
 Rules:
-- Use run_pandas_code or run_sql for aggregations/filtering/ranking. Assign the answer to `result`. pd, np, math, statistics are pre-imported; datasets are already local variables. No `import` statements — blocked by the sandbox.
-- IMPORTANT: each run_pandas_code call executes in a fresh, stateless sandbox. Variables and column mutations from previous calls are NOT retained — recompute anything you need in the same snippet.
-- Use create_chart for visualizations. Use detect_anomalies for outlier/data-quality questions and explain why each flagged row is unusual. Use get_dataset_info only if the schema below is insufficient — don't call it more than once per conversation.
-- On tool failure, read the error and try ONE corrected call, then explain the issue if it still fails rather than retrying indefinitely.
-- Keep code simple and defensive (handle NaNs). Never fabricate column names.
+- Use exactly one appropriate tool whenever possible.
+- Use run_pandas_code for calculations and analysis.
+- Use run_sql only if SQL is explicitly requested.
+- Use create_chart only for visualizations.
+- Use detect_anomalies only for anomaly or data-quality questions.
+- Use get_dataset_info only if the schema below is insufficient.
 
-Schema of loaded dataset(s):
+For run_pandas_code:
+- Datasets are already loaded as variables.
+- pd, np, math, and statistics are already available.
+- Never use import statements.
+- Never read files.
+- Always assign the final output to `result`.
+
+If a tool returns enough information, answer immediately.
+Do not call another tool unless information is missing.
+Do not repeat the same tool call.
+
+Schema:
 {schema_context}
 """
 
@@ -148,6 +163,14 @@ class LLMClient:
         to shrink the request, not resend the same oversized one."""
         last_error: Optional[Exception] = None
 
+        extra_kwargs: Dict[str, Any] = {}
+        if "gpt-oss" in self.model:
+            # reasoning_effort/reasoning_format are only accepted for Groq's
+            # gpt-oss reasoning models; sending them for other models (e.g.
+            # llama3-*) is rejected with a 400.
+            extra_kwargs["reasoning_effort"] = REASONING_EFFORT
+            extra_kwargs["reasoning_format"] = REASONING_FORMAT
+
         for attempt in range(MAX_TOOL_CALL_RETRIES + 1):
             start = time.perf_counter()
             try:
@@ -157,8 +180,7 @@ class LLMClient:
                     messages=[system_message] + messages,
                     tools=TOOL_SCHEMAS,
                     tool_choice="auto",
-                    reasoning_effort=REASONING_EFFORT,
-                    reasoning_format=REASONING_FORMAT,
+                    **extra_kwargs,
                 )
                 logger.info(f"LLM call took {time.perf_counter() - start:.2f}s")
                 return response
@@ -212,6 +234,7 @@ class LLMClient:
         for turn in range(max_turns):
             try:
                 response = self._create_completion(system_message, messages)
+                logger.info(f"Full response: {response}")
             except groq.APIStatusError as e:
                 if e.status_code in (413, 429):
                     logger.warning(f"Request too large / rate limited: {e}")
@@ -237,10 +260,20 @@ class LLMClient:
                     steps=steps,
                     raw_messages=self._compact_for_history(messages),
                 )
+            
+            try:
+                choice = response.choices[0]
+                msg = choice.message
+                tool_calls = msg.tool_calls or []
 
-            choice = response.choices[0]
-            msg = choice.message
-            tool_calls = msg.tool_calls or []
+                logger.info("=" * 60)
+                logger.info(f"Assistant content: {msg.content}")
+                logger.info(f"Tool calls: {tool_calls}")
+                logger.info("=" * 60)
+
+            except Exception:
+                logger.exception("Failed while reading Groq response")
+                raise
 
             assistant_msg: Dict[str, Any] = {"role": "assistant", "content": msg.content or ""}
             if tool_calls:
@@ -263,22 +296,42 @@ class LLMClient:
 
             for tc in tool_calls:
                 try:
-                    tool_input = json.loads(tc.function.arguments) if tc.function.arguments else {}
+                    # Debug logging
+                    logger.info("=" * 60)
+                    logger.info(f"Tool Name: {tc.function.name}")
+                    logger.info(f"Raw Arguments: {tc.function.arguments}")
+
+                    tool_input = (
+                        json.loads(tc.function.arguments)
+                        if tc.function.arguments
+                        else {}
+                    )
+
+                    logger.info(f"Parsed Arguments: {tool_input}")
+                    logger.info("=" * 60)
+
                 except json.JSONDecodeError:
                     tool_input = {}
-                    logger.warning(f"Could not parse tool arguments: {tc.function.arguments!r}")
+                    logger.warning(
+                        f"Could not parse tool arguments: {tc.function.arguments!r}"
+                    )
 
                 if tc.function.name == "get_dataset_info":
                     self._dataset_info_calls += 1
                     if self._dataset_info_calls > 1:
+                        result = {
+                            "success": True,
+                            "note": "Already provided in the system prompt schema context above — use that instead of calling this again.",
+                        }
+                        steps.append(
+                            AgentStep(tool_name=tc.function.name, tool_input=tool_input, tool_result=result)
+                        )
                         messages.append({
                             "role": "tool",
                             "tool_call_id": tc.id,
-                            "content": safe_json({
-                                "success": True,
-                                "note": "Already provided in the system prompt schema context above — use that instead of calling this again.",
-                            }),
+                            "content": safe_json(result),
                         })
+                        consecutive_tool_failures = 0
                         continue
 
                 logger.info(f"Turn {turn}: calling tool '{tc.function.name}' with input={tool_input}")
